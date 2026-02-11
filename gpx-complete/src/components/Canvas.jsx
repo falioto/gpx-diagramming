@@ -9,6 +9,7 @@ function Canvas() {
   const fabricCanvasRef = useRef(null);
   const containerRef = useRef(null);
   const [remoteCursors, setRemoteCursors] = useState([]);
+  const alignmentLinesRef = useRef([]);
 
   const {
     objects,
@@ -35,8 +36,8 @@ function Canvas() {
     if (!canvasRef.current || fabricCanvasRef.current) return;
 
     const canvas = new fabric.Canvas(canvasRef.current, {
-      width: window.innerWidth - 256, // Account for drawer
-      height: window.innerHeight - 64, // Account for toolbar
+      width: window.innerWidth - 256,
+      height: window.innerHeight - 64,
       backgroundColor: '#f5f5f5',
       selection: activeTool === 'select',
     });
@@ -61,7 +62,6 @@ function Canvas() {
       setCurrentUserId(yourId);
       setUsers(users);
       
-      // Load existing objects
       if (canvasState.objects && canvasState.objects.length > 0) {
         canvasState.objects.forEach(obj => {
           addObjectToCanvas(obj);
@@ -69,18 +69,15 @@ function Canvas() {
       }
     });
 
-    // Listen for new users
     socket.on('user:joined', (user) => {
       addUser(user);
     });
 
-    // Listen for user leaving
     socket.on('user:left', (userId) => {
       removeUser(userId);
       setRemoteCursors(prev => prev.filter(c => c.userId !== userId));
     });
 
-    // Listen for cursor updates
     socket.on('cursor:update', ({ userId, cursor }) => {
       setRemoteCursors(prev => {
         const existing = prev.find(c => c.userId === userId);
@@ -91,17 +88,14 @@ function Canvas() {
       });
     });
 
-    // Listen for object creation
     socket.on('object:created', (object) => {
       addObjectToCanvas(object);
     });
 
-    // Listen for object updates
     socket.on('object:updated', (object) => {
       updateObjectOnCanvas(object);
     });
 
-    // Listen for object deletion
     socket.on('object:deleted', (objectIds) => {
       objectIds.forEach(id => {
         const obj = canvas.getObjects().find(o => o.id === id);
@@ -137,12 +131,19 @@ function Canvas() {
 
     canvas.on('selection:cleared', () => {
       setSelectedObjects([]);
+      clearAlignmentLines(canvas);
       if (socket) {
         socket.emit('object:select', []);
       }
     });
 
+    // Alignment guides on object moving
+    canvas.on('object:moving', (e) => {
+      showAlignmentLines(canvas, e.target);
+    });
+
     canvas.on('object:modified', (e) => {
+      clearAlignmentLines(canvas);
       if (e.target && e.target.id) {
         const obj = fabricObjectToData(e.target);
         if (socket) {
@@ -164,11 +165,152 @@ function Canvas() {
     if (canvas) {
       canvas.selection = activeTool === 'select';
       canvas.defaultCursor = activeTool === 'pan' ? 'grab' : 'default';
+      
+      // Disable selection of objects when not in select mode
+      canvas.forEachObject(obj => {
+        obj.selectable = activeTool === 'select';
+      });
+      
       canvas.renderAll();
     }
   }, [activeTool]);
 
-  // Helper function to convert Fabric object to data
+  // Alignment guide functions
+  const showAlignmentLines = (canvas, target) => {
+    clearAlignmentLines(canvas);
+    
+    const canvasObjects = canvas.getObjects().filter(obj => obj !== target && obj.id);
+    const targetBounds = target.getBoundingRect();
+    const targetCenterX = targetBounds.left + targetBounds.width / 2;
+    const targetCenterY = targetBounds.top + targetBounds.height / 2;
+    
+    const threshold = 5; // pixels threshold for snapping
+    
+    canvasObjects.forEach(obj => {
+      const objBounds = obj.getBoundingRect();
+      const objCenterX = objBounds.left + objBounds.width / 2;
+      const objCenterY = objBounds.top + objBounds.height / 2;
+      
+      // Vertical center alignment
+      if (Math.abs(targetCenterX - objCenterX) < threshold) {
+        const line = new fabric.Line([objCenterX, 0, objCenterX, canvas.height], {
+          stroke: '#FF00FF',
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [5, 5]
+        });
+        canvas.add(line);
+        alignmentLinesRef.current.push(line);
+        
+        // Snap target to alignment
+        target.left = obj.left + (obj.width * obj.scaleX) / 2 - (target.width * target.scaleX) / 2;
+        target.setCoords();
+      }
+      
+      // Horizontal center alignment
+      if (Math.abs(targetCenterY - objCenterY) < threshold) {
+        const line = new fabric.Line([0, objCenterY, canvas.width, objCenterY], {
+          stroke: '#FF00FF',
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [5, 5]
+        });
+        canvas.add(line);
+        alignmentLinesRef.current.push(line);
+        
+        // Snap target to alignment
+        target.top = obj.top + (obj.height * obj.scaleY) / 2 - (target.height * target.scaleY) / 2;
+        target.setCoords();
+      }
+      
+      // Left edge alignment
+      if (Math.abs(targetBounds.left - objBounds.left) < threshold) {
+        const line = new fabric.Line([objBounds.left, 0, objBounds.left, canvas.height], {
+          stroke: '#FF00FF',
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [5, 5]
+        });
+        canvas.add(line);
+        alignmentLinesRef.current.push(line);
+        
+        target.left = obj.left;
+        target.setCoords();
+      }
+      
+      // Right edge alignment
+      if (Math.abs(targetBounds.left + targetBounds.width - (objBounds.left + objBounds.width)) < threshold) {
+        const line = new fabric.Line([
+          objBounds.left + objBounds.width, 
+          0, 
+          objBounds.left + objBounds.width, 
+          canvas.height
+        ], {
+          stroke: '#FF00FF',
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [5, 5]
+        });
+        canvas.add(line);
+        alignmentLinesRef.current.push(line);
+        
+        target.left = obj.left + (obj.width * obj.scaleX) - (target.width * target.scaleX);
+        target.setCoords();
+      }
+      
+      // Top edge alignment
+      if (Math.abs(targetBounds.top - objBounds.top) < threshold) {
+        const line = new fabric.Line([0, objBounds.top, canvas.width, objBounds.top], {
+          stroke: '#FF00FF',
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [5, 5]
+        });
+        canvas.add(line);
+        alignmentLinesRef.current.push(line);
+        
+        target.top = obj.top;
+        target.setCoords();
+      }
+      
+      // Bottom edge alignment
+      if (Math.abs(targetBounds.top + targetBounds.height - (objBounds.top + objBounds.height)) < threshold) {
+        const line = new fabric.Line([
+          0, 
+          objBounds.top + objBounds.height, 
+          canvas.width, 
+          objBounds.top + objBounds.height
+        ], {
+          stroke: '#FF00FF',
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [5, 5]
+        });
+        canvas.add(line);
+        alignmentLinesRef.current.push(line);
+        
+        target.top = obj.top + (obj.height * obj.scaleY) - (target.height * target.scaleY);
+        target.setCoords();
+      }
+    });
+    
+    canvas.renderAll();
+  };
+
+  const clearAlignmentLines = (canvas) => {
+    alignmentLinesRef.current.forEach(line => {
+      canvas.remove(line);
+    });
+    alignmentLinesRef.current = [];
+    canvas.renderAll();
+  };
+
   const fabricObjectToData = (fabricObj) => {
     return {
       id: fabricObj.id,
@@ -183,10 +325,10 @@ function Canvas() {
       fontWeight: fabricObj.fontWeight,
       fontStyle: fabricObj.fontStyle,
       textColor: fabricObj.fill,
+      width: fabricObj.width,
     };
   };
 
-  // Helper function to add object to canvas
   const addObjectToCanvas = (obj) => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
@@ -204,6 +346,7 @@ function Canvas() {
           angle: obj.rotation || 0,
           lockScalingFlip: true,
           lockUniScaling: false,
+          selectable: activeTool === 'select',
         });
         canvas.add(img);
         canvas.renderAll();
@@ -219,13 +362,13 @@ function Canvas() {
         fontStyle: obj.fontStyle || 'normal',
         fill: obj.textColor || '#000000',
         width: obj.width || 200,
+        selectable: activeTool === 'select',
       });
       canvas.add(text);
       canvas.renderAll();
     }
   };
 
-  // Helper function to update object on canvas
   const updateObjectOnCanvas = (obj) => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
@@ -243,7 +386,6 @@ function Canvas() {
     }
   };
 
-  // Handle drop from asset drawer
   const handleDrop = (e) => {
     e.preventDefault();
     const canvas = fabricCanvasRef.current;
@@ -279,7 +421,6 @@ function Canvas() {
     e.preventDefault();
   };
 
-  // Handle text tool click
   const handleCanvasClick = (e) => {
     if (activeTool === 'text') {
       const canvas = fabricCanvasRef.current;
@@ -289,7 +430,7 @@ function Canvas() {
       const newText = {
         id: uuidv4(),
         type: 'text',
-        text: 'New Text',
+        text: 'Double-click to edit',
         position: { x: pointer.x, y: pointer.y },
         fontSize: 16,
         fontWeight: 'normal',
@@ -306,10 +447,12 @@ function Canvas() {
       if (socket) {
         socket.emit('object:create', newText);
       }
+      
+      // Switch back to select tool after adding text
+      useStore.getState().setActiveTool('select');
     }
   };
 
-  // Render remote cursors
   const renderRemoteCursors = () => {
     return remoteCursors.map(({ userId, cursor }) => {
       const user = users.find(u => u.id === userId);
