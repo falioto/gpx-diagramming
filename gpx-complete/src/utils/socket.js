@@ -10,11 +10,12 @@ class SocketService {
   connect() {
     if (!this.socket) {
       this.socket = io(SOCKET_URL, {
-        transports: ['polling', 'websocket'],
+        transports: ['websocket', 'polling'], // ✅ CHANGED: websocket first
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionAttempts: 10,
-        withCredentials: true
+        withCredentials: true,
+        autoConnect: true // ✅ ADDED: explicit autoConnect
       });
 
       this.socket.on('connect', () => {
@@ -29,6 +30,7 @@ class SocketService {
         console.error('Connection error:', error);
       });
     }
+
     return this.socket;
   }
 
