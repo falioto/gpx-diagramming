@@ -9,7 +9,6 @@ function Canvas() {
   const fabricCanvasRef = useRef(null);
   const containerRef = useRef(null);
   const [remoteCursors, setRemoteCursors] = useState([]);
-  const alignmentLinesRef = useRef([]);
 
   const {
     objects,
@@ -131,19 +130,12 @@ function Canvas() {
 
     canvas.on('selection:cleared', () => {
       setSelectedObjects([]);
-      clearAlignmentLines(canvas);
       if (socket) {
         socket.emit('object:select', []);
       }
     });
 
-    // Alignment guides on object moving
-    canvas.on('object:moving', (e) => {
-      showAlignmentLines(canvas, e.target);
-    });
-
     canvas.on('object:modified', (e) => {
-      clearAlignmentLines(canvas);
       if (e.target && e.target.id) {
         const obj = fabricObjectToData(e.target);
         if (socket) {
@@ -166,7 +158,6 @@ function Canvas() {
       canvas.selection = activeTool === 'select';
       canvas.defaultCursor = activeTool === 'pan' ? 'grab' : 'default';
       
-      // Disable selection of objects when not in select mode
       canvas.forEachObject(obj => {
         obj.selectable = activeTool === 'select';
       });
@@ -175,142 +166,28 @@ function Canvas() {
     }
   }, [activeTool]);
 
-  // Alignment guide functions
-  const showAlignmentLines = (canvas, target) => {
-    clearAlignmentLines(canvas);
-    
-    const canvasObjects = canvas.getObjects().filter(obj => obj !== target && obj.id);
-    const targetBounds = target.getBoundingRect();
-    const targetCenterX = targetBounds.left + targetBounds.width / 2;
-    const targetCenterY = targetBounds.top + targetBounds.height / 2;
-    
-    const threshold = 5; // pixels threshold for snapping
-    
-    canvasObjects.forEach(obj => {
-      const objBounds = obj.getBoundingRect();
-      const objCenterX = objBounds.left + objBounds.width / 2;
-      const objCenterY = objBounds.top + objBounds.height / 2;
-      
-      // Vertical center alignment
-      if (Math.abs(targetCenterX - objCenterX) < threshold) {
-        const line = new fabric.Line([objCenterX, 0, objCenterX, canvas.height], {
-          stroke: '#FF00FF',
-          strokeWidth: 1,
-          selectable: false,
-          evented: false,
-          strokeDashArray: [5, 5]
-        });
-        canvas.add(line);
-        alignmentLinesRef.current.push(line);
-        
-        // Snap target to alignment
-        target.left = obj.left + (obj.width * obj.scaleX) / 2 - (target.width * target.scaleX) / 2;
-        target.setCoords();
-      }
-      
-      // Horizontal center alignment
-      if (Math.abs(targetCenterY - objCenterY) < threshold) {
-        const line = new fabric.Line([0, objCenterY, canvas.width, objCenterY], {
-          stroke: '#FF00FF',
-          strokeWidth: 1,
-          selectable: false,
-          evented: false,
-          strokeDashArray: [5, 5]
-        });
-        canvas.add(line);
-        alignmentLinesRef.current.push(line);
-        
-        // Snap target to alignment
-        target.top = obj.top + (obj.height * obj.scaleY) / 2 - (target.height * target.scaleY) / 2;
-        target.setCoords();
-      }
-      
-      // Left edge alignment
-      if (Math.abs(targetBounds.left - objBounds.left) < threshold) {
-        const line = new fabric.Line([objBounds.left, 0, objBounds.left, canvas.height], {
-          stroke: '#FF00FF',
-          strokeWidth: 1,
-          selectable: false,
-          evented: false,
-          strokeDashArray: [5, 5]
-        });
-        canvas.add(line);
-        alignmentLinesRef.current.push(line);
-        
-        target.left = obj.left;
-        target.setCoords();
-      }
-      
-      // Right edge alignment
-      if (Math.abs(targetBounds.left + targetBounds.width - (objBounds.left + objBounds.width)) < threshold) {
-        const line = new fabric.Line([
-          objBounds.left + objBounds.width, 
-          0, 
-          objBounds.left + objBounds.width, 
-          canvas.height
-        ], {
-          stroke: '#FF00FF',
-          strokeWidth: 1,
-          selectable: false,
-          evented: false,
-          strokeDashArray: [5, 5]
-        });
-        canvas.add(line);
-        alignmentLinesRef.current.push(line);
-        
-        target.left = obj.left + (obj.width * obj.scaleX) - (target.width * target.scaleX);
-        target.setCoords();
-      }
-      
-      // Top edge alignment
-      if (Math.abs(targetBounds.top - objBounds.top) < threshold) {
-        const line = new fabric.Line([0, objBounds.top, canvas.width, objBounds.top], {
-          stroke: '#FF00FF',
-          strokeWidth: 1,
-          selectable: false,
-          evented: false,
-          strokeDashArray: [5, 5]
-        });
-        canvas.add(line);
-        alignmentLinesRef.current.push(line);
-        
-        target.top = obj.top;
-        target.setCoords();
-      }
-      
-      // Bottom edge alignment
-      if (Math.abs(targetBounds.top + targetBounds.height - (objBounds.top + objBounds.height)) < threshold) {
-        const line = new fabric.Line([
-          0, 
-          objBounds.top + objBounds.height, 
-          canvas.width, 
-          objBounds.top + objBounds.height
-        ], {
-          stroke: '#FF00FF',
-          strokeWidth: 1,
-          selectable: false,
-          evented: false,
-          strokeDashArray: [5, 5]
-        });
-        canvas.add(line);
-        alignmentLinesRef.current.push(line);
-        
-        target.top = obj.top + (obj.height * obj.scaleY) - (target.height * target.scaleY);
-        target.setCoords();
-      }
-    });
-    
-    canvas.renderAll();
-  };
+  // Sync deletions from store to canvas
+  useEffect(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
 
-  const clearAlignmentLines = (canvas) => {
-    alignmentLinesRef.current.forEach(line => {
-      canvas.remove(line);
-    });
-    alignmentLinesRef.current = [];
-    canvas.renderAll();
-  };
+    const canvasObjectIds = canvas.getObjects().map(obj => obj.id).filter(Boolean);
+    const storeObjectIds = objects.map(obj => obj.id);
+    const idsToRemove = canvasObjectIds.filter(id => !storeObjectIds.includes(id));
+    
+    if (idsToRemove.length > 0) {
+      idsToRemove.forEach(id => {
+        const obj = canvas.getObjects().find(o => o.id === id);
+        if (obj) {
+          canvas.remove(obj);
+        }
+      });
+      canvas.discardActiveObject();
+      canvas.renderAll();
+    }
+  }, [objects]);
 
+  // Helper functions
   const fabricObjectToData = (fabricObj) => {
     return {
       id: fabricObj.id,
@@ -448,7 +325,6 @@ function Canvas() {
         socket.emit('object:create', newText);
       }
       
-      // Switch back to select tool after adding text
       useStore.getState().setActiveTool('select');
     }
   };
