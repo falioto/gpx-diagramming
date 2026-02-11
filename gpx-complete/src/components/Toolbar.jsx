@@ -2,7 +2,7 @@ import React from 'react';
 import { useStore } from '../store/useStore';
 
 function Toolbar({ onExport, onZoomIn, onZoomOut, onResetZoom, zoom }) {
-  const { activeTool, setActiveTool, isSaving, lastSaved } = useStore();
+  const { activeTool, setActiveTool, isSaving, lastSaved, selectedObjects } = useStore();
 
   const tools = [
     { id: 'select', icon: 'cursor', label: 'Select (V)' },
@@ -18,6 +18,19 @@ function Toolbar({ onExport, onZoomIn, onZoomOut, onResetZoom, zoom }) {
     if (minutes < 60) return `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);
     return `${hours}h ago`;
+  };
+
+  const handleDelete = () => {
+    // Trigger delete by simulating keyboard event
+    const event = new KeyboardEvent('keydown', {
+      key: 'Delete',
+      code: 'Delete',
+      keyCode: 46,
+      which: 46,
+      bubbles: true,
+      cancelable: true
+    });
+    document.dispatchEvent(event);
   };
 
   const renderIcon = (iconType) => {
@@ -75,6 +88,22 @@ function Toolbar({ onExport, onZoomIn, onZoomOut, onResetZoom, zoom }) {
             </button>
           ))}
         </div>
+
+        {/* Delete Button - Shows when objects are selected */}
+        {selectedObjects && selectedObjects.length > 0 && (
+          <>
+            <div className="h-8 w-px bg-gray-300"></div>
+            <button
+              onClick={handleDelete}
+              className="p-2 rounded-lg transition text-red-600 hover:bg-red-50"
+              title={`Delete ${selectedObjects.length} selected object${selectedObjects.length > 1 ? 's' : ''}`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </>
+        )}
 
         <div className="h-8 w-px bg-gray-300"></div>
 
