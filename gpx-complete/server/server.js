@@ -2,25 +2,24 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
-const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const server = http.createServer(app);
 
-// Fixed CORS configuration
+// CORS configuration
+const allowedOrigins = [
+  'https://gpxdiagramming.netlify.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:4200'
+];
+
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, curl, postman)
     if (!origin) return callback(null, true);
     
-    // Allow Netlify and localhost domains
-    const allowedOrigins = [
-      'https://gpxdiagramming.netlify.app',
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'http://localhost:4200'
-    ];
-    
+    // Check if origin is allowed
     if (allowedOrigins.some(allowed => origin.startsWith(allowed)) || 
         origin.includes('netlify.app')) {
       callback(null, true);
@@ -33,15 +32,15 @@ const corsOptions = {
   allowedHeaders: ["Content-Type", "Authorization"]
 };
 
-// Apply CORS to Express
+// Apply CORS middleware
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Configure Socket.IO with CORS
+// Configure Socket.IO
 const io = socketIo(server, {
   cors: corsOptions,
-  transports: ['websocket', 'polling'], // Explicitly set transports
-  allowEIO3: true // Allow Engine.IO v3 clients
+  transports: ['websocket', 'polling'],
+  allowEIO3: true
 });
 
 // Root endpoint
@@ -56,14 +55,14 @@ app.get('/', (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
   });
 });
 
-// Canvas state and user management
+// Canvas state
 const canvasState = {
   objects: [],
   viewport: { zoom: 1, panX: 0, panY: 0 }
@@ -77,6 +76,7 @@ const colors = [
 ];
 let colorIndex = 0;
 
+// Socket.IO connection handling
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
   
