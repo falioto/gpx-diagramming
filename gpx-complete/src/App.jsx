@@ -113,6 +113,17 @@ function App() {
     setIsExportModalOpen(true);
   };
 
+  const handleDelete = () => {
+    const state = useStore.getState();
+    if (state.selectedObjects.length > 0) {
+      const socket = require('./utils/socket').socketService.getSocket();
+      if (socket) {
+        socket.emit('object:delete', state.selectedObjects);
+      }
+      state.deleteObjects(state.selectedObjects);
+    }
+  };
+
   if (!isAuthenticated) {
     return <LandingPage onAuthenticate={handleAuthenticate} />;
   }
@@ -124,6 +135,7 @@ function App() {
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onResetZoom={handleResetZoom}
+        onDelete={handleDelete}
         zoom={zoom}
       />
       
