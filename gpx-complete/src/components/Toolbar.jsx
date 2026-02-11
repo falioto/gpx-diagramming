@@ -1,7 +1,8 @@
 import React from 'react';
 import { useStore } from '../store/useStore';
+import { socketService } from '../utils/socket';
 
-function Toolbar({ onExport, onZoomIn, onZoomOut, onResetZoom, zoom }) {
+function Toolbar({ onExport, onZoomIn, onZoomOut, onResetZoom, zoom, onDelete }) {
   const { activeTool, setActiveTool, isSaving, lastSaved, selectedObjects } = useStore();
 
   const tools = [
@@ -21,16 +22,9 @@ function Toolbar({ onExport, onZoomIn, onZoomOut, onResetZoom, zoom }) {
   };
 
   const handleDelete = () => {
-    // Trigger delete by simulating keyboard event
-    const event = new KeyboardEvent('keydown', {
-      key: 'Delete',
-      code: 'Delete',
-      keyCode: 46,
-      which: 46,
-      bubbles: true,
-      cancelable: true
-    });
-    document.dispatchEvent(event);
+    if (onDelete && selectedObjects.length > 0) {
+      onDelete();
+    }
   };
 
   const renderIcon = (iconType) => {
@@ -95,7 +89,7 @@ function Toolbar({ onExport, onZoomIn, onZoomOut, onResetZoom, zoom }) {
             <div className="h-8 w-px bg-gray-300"></div>
             <button
               onClick={handleDelete}
-              className="p-2 rounded-lg transition text-red-600 hover:bg-red-50"
+              className="p-2 rounded-lg transition text-red-600 hover:bg-red-50 hover:text-red-700"
               title={`Delete ${selectedObjects.length} selected object${selectedObjects.length > 1 ? 's' : ''}`}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
