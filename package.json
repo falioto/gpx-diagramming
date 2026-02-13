@@ -3,15 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "node gpx-complete/server/server.js"
+    "start": "node gpx-complete/server/server.js",
+    "postinstall": "cd gpx-complete/server && npm install --production"
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.6.1",
-    "cors": "^2.8.5",
-    "uuid": "^9.0.0"
   }
 }
