@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "cd gpx-complete/server && node server.js",
-    "postinstall": "cd gpx-complete/server && npm install"
+    "start": "node gpx-complete/server/server.js",
+    "postinstall": "npm install --prefix gpx-complete/server"
   },
   "engines": {
     "node": ">=18.0.0",
